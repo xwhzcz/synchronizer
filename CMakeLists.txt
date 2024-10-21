@@ -3,7 +3,7 @@ project(my_sync VERSION 0.1.0 LANGUAGES C CXX)
 
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-option(DEBUG_INFO "enable debug messages" OFF)
+option(DEBUG_INFO "enable debug messages" ON)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -54,6 +54,7 @@ target_compile_features(approximate_algo PUBLIC cxx_std_17)
 if (DEBUG_INFO)
     target_compile_definitions(${PROJECT_NAME} PRIVATE -DDEBUG)
     target_compile_definitions(approximate_algo PRIVATE -DDEBUG)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 # target_compile_definitions(${PROJECT_NAME} PRIVATE -DPI=3.1415926)

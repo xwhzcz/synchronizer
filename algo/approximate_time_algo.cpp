@@ -37,7 +37,7 @@ void ApproximateTimeAlgo::set_mini_time_interval(TimestampType interval) {
 void ApproximateTimeAlgo::wait_data() const {
   for (const auto& [name, channel] : *channels_) {
 #ifdef DEBUG
-    std::cout << "Algo channel wait" << name << std::endl;
+    std::cout << "Algo channel wait " << name << std::endl;
 #endif
     if (!running_.load()) {
       break;

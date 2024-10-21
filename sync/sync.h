@@ -37,7 +37,7 @@ class Sync {
                                        const BaseMsgHolder::SharedPtr& msg);
   template <typename MsgType>
   const BaseMsgHolder::SharedPtr& push(const std::string& channel_name,
-                                       const MsgType& data, TimestampType t);
+                                       MsgType&& data, TimestampType t);
   bool has_empty_channel();
 
  private:
@@ -154,9 +154,9 @@ const BaseMsgHolder::SharedPtr& Sync<Algo>::push(
 template <typename Algo>
 template <typename MsgType>
 const BaseMsgHolder::SharedPtr& Sync<Algo>::push(
-    const std::string& channel_name, const MsgType& data, TimestampType t) {
-  auto msg =
-      std::make_shared<MsgHolder<MsgType>>(std::make_shared<MsgType>(data), t);
+    const std::string& channel_name, MsgType&& data, TimestampType t) {
+  using type = typename std::remove_reference<MsgType>::type;
+  auto msg = std::make_shared<MsgHolder<type>>(std::forward<type>(data), t);
   return push(channel_name, msg);
 }
 

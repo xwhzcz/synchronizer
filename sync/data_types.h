@@ -24,16 +24,10 @@
 using TimestampType = uint64_t;
 #define TIMESTAMP_MAX ULLONG_MAX
 
-class BaseHolder {
- public:
-  virtual ~BaseHolder() = default;
-  using SharedPtr = std::shared_ptr<BaseHolder>;
-};
-
-class BaseMsgHolder : public BaseHolder {
+class BaseMsgHolder {
  public:
   using SharedPtr = std::shared_ptr<BaseMsgHolder>;
-  ~BaseMsgHolder() override = default;
+  ~BaseMsgHolder() = default;
   virtual TimestampType time() = 0;
 };
 
@@ -41,20 +35,21 @@ template <typename MsgType>
 class MsgHolder : public BaseMsgHolder {
  public:
   using SharedPtr = std::shared_ptr<MsgHolder<MsgType>>;
-  MsgHolder(const std::shared_ptr<MsgType>& m, TimestampType t)
-      : msg_(m), time_(t) {}
+  MsgHolder(MsgType&& m, TimestampType t)
+      : msg_(std::forward<MsgType>(m)), time_(t) {}
+
   TimestampType time() override { return time_; }
-  std::shared_ptr<MsgType>& data() { return msg_; }
-  static std::shared_ptr<MsgType>& msg(const BaseMsgHolder::SharedPtr& data) {
+  MsgType& data() { return msg_; }
+  static MsgType& msg(const BaseMsgHolder::SharedPtr& data) {
     return std::dynamic_pointer_cast<MsgHolder<MsgType>>(data)->data();
   }
 
  private:
-  std::shared_ptr<MsgType> msg_;
+  MsgType msg_;
   TimestampType time_;
 };
 
-class BaseChannelHolder : public BaseHolder {
+class BaseChannelHolder {
  public:
   using SharedPtr = std::shared_ptr<BaseChannelHolder>;
   explicit BaseChannelHolder(const std::string& channel_name)
