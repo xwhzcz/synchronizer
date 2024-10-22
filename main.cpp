@@ -117,8 +117,8 @@ class Cb {
         std::cout << name << " " << msg.data() << " " << data->time()
                   << std::endl;
       } else {
-        auto msg = MsgHolder<int>::msg(data);
-        std::cout << name << " " << msg << " " << data->time() << std::endl;
+        auto msg = MsgHolder<std::shared_ptr<int>>::msg(data);
+        std::cout << name << " " << *msg << " " << data->time() << std::endl;
       }
     }
     std::cout << "-----------------------------------" << std::endl;
@@ -145,7 +145,7 @@ void add_int_msg(const std::string& ch_name) {
   while (!stopped) {
     ++count;
     Sync<ApproximateTimeAlgo>::instance().push(
-        ch_name, count,
+        ch_name, std::make_shared<int>(count),
         std::chrono::system_clock::now().time_since_epoch().count());
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
@@ -162,11 +162,11 @@ int main(int argc, char** argv) {
   Sync<ApproximateTimeAlgo>::instance().run();
 
   // 添加channel
-  auto ch1 = std::make_shared<BasicChannelHolder>(ch_name1, 50);
+  auto ch1 = std::make_shared<BasicChannelHolder>(ch_name1, 4096);
   Sync<ApproximateTimeAlgo>::instance().add_channel(ch1->name(), ch1);
   std::this_thread::sleep_for(std::chrono::seconds(5));
   // auto ch2 = std::make_shared<BasicChannelHolder>(ch_name2, 50);
-  Sync<ApproximateTimeAlgo>::instance().add_basic_channel(ch_name2, 50);
+  Sync<ApproximateTimeAlgo>::instance().add_basic_channel(ch_name2, 4096);
 
   // 添加数据
   auto t1 = std::thread(add_string_msg, ch_name1);

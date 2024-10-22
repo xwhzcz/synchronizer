@@ -14,11 +14,12 @@
 #include <list>
 
 #include "algo/base_sync_algo.h"
+#include "sync/channel_manager.h"
 
 class ApproximateTimeAlgo : public BaseSyncAlog {
  public:
-  explicit ApproximateTimeAlgo(ChannelContainer* channels)
-      : channels_(channels) {}
+  explicit ApproximateTimeAlgo(ChannelManager* channel_mgr)
+      : channel_mgr_(channel_mgr) {}
   ~ApproximateTimeAlgo() override = default;
   void sync(const DataCb& data_cb) override;
   void set_mini_time_interval(TimestampType interval) override;
@@ -47,7 +48,8 @@ class ApproximateTimeAlgo : public BaseSyncAlog {
     std::list<std::string> cur_order_;
     TimestampType mini_size_;
   } status_;
-  ChannelContainer* channels_;
+  ChannelManager* channel_mgr_;
+  ChannelContainer active_channels_;
   std::mutex mtx_;
   TimestampType mini_interval_{0};
 };

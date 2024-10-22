@@ -14,18 +14,22 @@
 void ApproximateTimeAlgo::sync(const DataCb& data_cb) {
   running_.store(true);
   while (running_.load()) {
+    // 0. 清空缓存
+    init();
+    if (!running_.load()) {
+      break;
+    }
+    // 1. 等待所有 channel 全部存有数据
     wait_data();
     if (!running_.load()) {
       break;
     }
-    // 0. 清空缓存
-    init();
-    // 1. 选择数据
+    // 2. 选择数据
     select_data();
     if (!running_.load()) {
       break;
     }
-    // 2. 发布数据
+    // 3. 发布数据
     data_cb(out_data_);
   }
 }
@@ -35,7 +39,7 @@ void ApproximateTimeAlgo::set_mini_time_interval(TimestampType interval) {
 }
 
 void ApproximateTimeAlgo::wait_data() const {
-  for (const auto& [name, channel] : *channels_) {
+  for (const auto& [name, channel] : active_channels_) {
 #ifdef DEBUG
     std::cout << "Algo channel wait " << name << std::endl;
 #endif
@@ -53,6 +57,7 @@ void ApproximateTimeAlgo::init() {
   status_.mini_pos_.clear();
   status_.cur_order_.clear();
   status_.mini_size_ = TIMESTAMP_MAX;
+  active_channels_ = std::move(channel_mgr_->get_active_channels());
 }
 
 void ApproximateTimeAlgo::select_pivot() {
@@ -65,7 +70,7 @@ void ApproximateTimeAlgo::select_pivot() {
 }
 
 void ApproximateTimeAlgo::select_data() {
-  for (const auto& [name, channel] : *channels_) {
+  for (const auto& [name, channel] : active_channels_) {
     status_.cur_pos_[name] = 0;
     status_.cur_time_[name] = cur_point(name)->time();
     create_order(name);
@@ -73,15 +78,18 @@ void ApproximateTimeAlgo::select_data() {
   update_mini_set();
 
   select_pivot();
+
+  // 此循环每次移动一个item，直到找到所有候选order
   while (status_.cur_order_.back() != status_.pivot_) {
-    if (mini_interval_ != 0 && status_.mini_size_ < mini_interval_) break;
-    move();
+    if (mini_interval_ != 0 && status_.mini_size_ < mini_interval_)
+      break;  // 当找到最优解时可提前退出
+    move();   // 移动一个item
     if (!running_.load()) {
       return;
     }
   }
   for (const auto& [name, pos] : status_.mini_pos_) {
-    auto channel = channels_->at(name);
+    auto channel = active_channels_.at(name);
     std::unique_lock lk(channel->mtx());
     out_data_[name] = channel->at(pos);
     channel->erase(0, pos + 1);
@@ -107,13 +115,22 @@ TimestampType ApproximateTimeAlgo::cur_size() {
 
 BaseMsgHolder::SharedPtr ApproximateTimeAlgo::cur_point(
     const std::string& name) {
-  return channels_->at(name)->concurrent_at(status_.cur_pos_[name]);
+  return active_channels_.at(name)->concurrent_at(status_.cur_pos_[name]);
 }
 
+/**
+ * @brief Advances the order by moving the earliest item to a new position.
+ *
+ * This function updates the position and time of the last item in the current
+ * order, effectively moving it to the next available position in its channel.
+ * If the message at the new position is valid, the current time and position
+ * for the moved item are updated. Subsequently, the order and the mini set
+ * are updated to reflect these changes.
+ */
 void ApproximateTimeAlgo::move() {
   auto moved_point_name = status_.cur_order_.back();
   auto next_point_pos = status_.cur_pos_[moved_point_name] + 1;
-  auto msg = channels_->at(moved_point_name)->wait_at(next_point_pos);
+  auto msg = active_channels_.at(moved_point_name)->wait_at(next_point_pos);
   if (!msg) {
     return;
   }
@@ -125,12 +142,12 @@ void ApproximateTimeAlgo::move() {
 
 BaseMsgHolder::SharedPtr ApproximateTimeAlgo::mini_point(
     const std::string& name) {
-  return channels_->at(name)->concurrent_at(status_.mini_pos_[name]);
+  return active_channels_.at(name)->concurrent_at(status_.mini_pos_[name]);
 }
 
 void ApproximateTimeAlgo::clear_channel_data() const {
   for (const auto& [name, pos] : status_.mini_pos_) {
-    channels_->at(name)->concurrent_erase(0, pos + 1);
+    active_channels_.at(name)->concurrent_erase(0, pos + 1);
   }
 }
 

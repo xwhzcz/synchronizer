@@ -83,6 +83,7 @@ class BaseChannelHolder {
   std::condition_variable cv_;
   std::string channel_name_;
   std::atomic<bool> running_{true};
+  std::atomic<bool> is_alive_{true};
 };
 
 class BasicChannelHolder : public BaseChannelHolder {
