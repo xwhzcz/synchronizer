@@ -13,6 +13,7 @@
 
 #include <thread>
 
+#include "sync/channel_manager.h"
 #include "sync/data_types.h"
 
 template <typename Algo>
@@ -33,20 +34,16 @@ class Sync {
   void set_data_cb(const DataCb& cb);
   void set_mini_time_interval(TimestampType interval);
   void set_channel_nums(size_t n);
-  const BaseMsgHolder::SharedPtr& push(const std::string& channel_name,
-                                       const BaseMsgHolder::SharedPtr& msg);
   template <typename MsgType>
   const BaseMsgHolder::SharedPtr& push(const std::string& channel_name,
-                                       const MsgType& data, TimestampType t);
+                                       MsgType&& data, TimestampType t);
   bool has_empty_channel();
 
  private:
   Sync();
   Algo algo_;
   ChannelType channel_nullptr_;
-  BaseMsgHolder::SharedPtr msg_nullptr_;
-  ChannelContainer channels_;
-  size_t channel_nums_{0};
+  ChannelManager channel_mgr_;
   DataCb data_cb_;
   std::thread worker_;
   std::mutex mtx_;
@@ -54,12 +51,12 @@ class Sync {
 };
 
 template <typename Algo>
-Sync<Algo>::Sync() : algo_(&channels_) {}
+Sync<Algo>::Sync() : algo_(&channel_mgr_) {}
 
 template <typename Algo>
 Sync<Algo>::~Sync() {
   stop();
-  if (worker_.joinable()) worker_.join();
+  join();
 }
 
 template <typename Algo>
@@ -77,20 +74,8 @@ void Sync<Algo>::run() {
 
 template <typename Algo>
 void Sync<Algo>::start() {
-  {
-    std::unique_lock lk(mtx_);
-    cv_.wait(lk, [this]() {
-      return (channel_nums_ == 0 && !channels_.empty()) ||
-             channels_.size() == channel_nums_;
-    });
-  }
-
-  for (const auto& [name, channel] : channels_) {
-    channel->wait_not_empty();
-  }
-  for (const auto& [name, channel] : channels_) {
-    channel->concurrent_clear();
-  }
+  channel_mgr_.wait_all_channels();
+  channel_mgr_.start();
 
   algo_.sync(data_cb_);
 }
@@ -98,9 +83,7 @@ void Sync<Algo>::start() {
 template <typename Algo>
 void Sync<Algo>::stop() {
   algo_.stop();
-  for (const auto& [name, channel] : channels_) {
-    channel->stop();
-  }
+  channel_mgr_.stop();
 }
 
 template <typename Algo>
@@ -111,14 +94,7 @@ void Sync<Algo>::join() {
 template <typename Algo>
 bool Sync<Algo>::add_channel(const std::string& channel_name,
                              const BaseChannelHolder::SharedPtr& channel) {
-  std::unique_lock lk(mtx_);
-  if (channels_.count(channel_name) != 0) return false;
-  if (channels_.size() < channel_nums_) {
-    channels_[channel_name] = channel;
-    cv_.notify_all();
-    return true;
-  }
-  return false;
+  return channel_mgr_.add_channel(channel_name, channel);
 }
 
 template <typename Algo>
@@ -140,30 +116,17 @@ void Sync<Algo>::set_mini_time_interval(TimestampType interval) {
 
 template <typename Algo>
 void Sync<Algo>::set_channel_nums(size_t n) {
-  channel_nums_ = n;
-}
-
-template <typename Algo>
-const BaseMsgHolder::SharedPtr& Sync<Algo>::push(
-    const std::string& channel_name, const BaseMsgHolder::SharedPtr& msg) {
-  if (channels_.count(channel_name) == 0 || channels_.size() != channel_nums_)
-    return msg_nullptr_;
-  return channels_.at(channel_name)->concurrent_push(msg);
+  channel_mgr_.set_channel_nums(n);
 }
 
 template <typename Algo>
 template <typename MsgType>
 const BaseMsgHolder::SharedPtr& Sync<Algo>::push(
-    const std::string& channel_name, const MsgType& data, TimestampType t) {
-  auto msg =
-      std::make_shared<MsgHolder<MsgType>>(std::make_shared<MsgType>(data), t);
-  return push(channel_name, msg);
+    const std::string& channel_name, MsgType&& data, TimestampType t) {
+  return channel_mgr_.push(channel_name, std::forward<MsgType>(data), t);
 }
 
 template <typename Algo>
 bool Sync<Algo>::has_empty_channel() {
-  for (const auto& [name, channel] : channels_) {
-    if (channel->empty()) return true;
-  }
-  return false;
+  return channel_mgr_.has_empty_channel();
 }
