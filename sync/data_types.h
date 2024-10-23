@@ -100,7 +100,7 @@ class BasicChannelHolder : public BaseChannelHolder {
  public:
   using SharedPtr = std::shared_ptr<BasicChannelHolder>;
   explicit BasicChannelHolder(const std::string& channel_name,
-                              size_t queue_length = 50,
+                              size_t queue_length = 30,
                               uint64_t alive_timeout = 150)
       : BaseChannelHolder(channel_name, alive_timeout),
         queue_length_(queue_length) {}

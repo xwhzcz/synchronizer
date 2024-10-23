@@ -26,7 +26,8 @@ class Sync {
   bool add_channel(const std::string& channel_name,
                    const BaseChannelHolder::SharedPtr& channel);
   bool add_basic_channel(const std::string& channel_name,
-                         size_t queue_length = 10);
+                         size_t queue_length = 30,
+                         uint64_t alive_timeout = 150);
   void run();
   void start();
   void stop();
@@ -99,8 +100,10 @@ bool Sync<Algo>::add_channel(const std::string& channel_name,
 
 template <typename Algo>
 bool Sync<Algo>::add_basic_channel(const std::string& channel_name,
-                                   size_t queue_length) {
-  auto ch = std::make_shared<BasicChannelHolder>(channel_name, queue_length);
+                                   size_t queue_length,
+                                   uint64_t alive_timeout) {
+  auto ch = std::make_shared<BasicChannelHolder>(channel_name, queue_length,
+                                                 alive_timeout);
   return add_channel(channel_name, ch);
 }
 

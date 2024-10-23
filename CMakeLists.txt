@@ -34,7 +34,7 @@ target_include_directories(approximate_algo PRIVATE
 )
 
 # demo 程序
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp sync/channel_manager.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${roscpp_LIBRARIES}
     approximate_algo
