@@ -52,8 +52,10 @@ class MsgHolder : public BaseMsgHolder {
 class BaseChannelHolder {
  public:
   using SharedPtr = std::shared_ptr<BaseChannelHolder>;
-  explicit BaseChannelHolder(const std::string& channel_name)
-      : channel_name_(channel_name) {}
+  using WeakPtr = std::weak_ptr<BaseChannelHolder>;
+  explicit BaseChannelHolder(const std::string& channel_name,
+                             uint64_t alive_timeout)
+      : channel_name_(channel_name), alive_timeout_(alive_timeout) {}
   virtual const BaseMsgHolder::SharedPtr& push(
       const BaseMsgHolder::SharedPtr& msg) = 0;
   virtual const BaseMsgHolder::SharedPtr& concurrent_push(
@@ -67,6 +69,13 @@ class BaseChannelHolder {
     notify_all();
   }
   void notify_all() { cv_.notify_all(); }
+  bool is_alive() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+                   .count() -
+               latest_tp_.load() <
+           alive_timeout_;
+  }
   virtual const BaseMsgHolder::SharedPtr& at(int pos) = 0;
   virtual const BaseMsgHolder::SharedPtr& concurrent_at(int pos) = 0;
   virtual const BaseMsgHolder::SharedPtr& wait_at(int pos) = 0;
@@ -83,18 +92,24 @@ class BaseChannelHolder {
   std::condition_variable cv_;
   std::string channel_name_;
   std::atomic<bool> running_{true};
-  std::atomic<bool> is_alive_{true};
+  std::atomic<uint64_t> latest_tp_{0};
+  uint64_t alive_timeout_{200};
 };
 
 class BasicChannelHolder : public BaseChannelHolder {
  public:
   using SharedPtr = std::shared_ptr<BasicChannelHolder>;
   explicit BasicChannelHolder(const std::string& channel_name,
-                              size_t queue_length = 10)
-      : BaseChannelHolder(channel_name), queue_length_(queue_length) {}
+                              size_t queue_length = 50,
+                              uint64_t alive_timeout = 150)
+      : BaseChannelHolder(channel_name, alive_timeout),
+        queue_length_(queue_length) {}
 
   const BaseMsgHolder::SharedPtr& push(
       const BaseMsgHolder::SharedPtr& msg) override {
+    latest_tp_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now().time_since_epoch())
+                     .count();
     if (data_.size() >= queue_length_) return nullptr_;
     data_.emplace_back(msg);
     cv_.notify_all();
@@ -120,8 +135,10 @@ class BasicChannelHolder : public BaseChannelHolder {
   }
   const BaseMsgHolder::SharedPtr& wait_at(int pos) override {
     std::unique_lock lk(mtx_);
-    cv_.wait(lk, [this, pos]() { return !running_.load() || at(pos); });
-    if (!running_.load()) {
+    cv_.wait(lk, [this, pos]() {
+      return !running_.load() || at(pos) || !is_alive();
+    });
+    if (!running_.load() || !is_alive()) {
       return nullptr_;
     }
     return at(pos);
@@ -141,7 +158,8 @@ class BasicChannelHolder : public BaseChannelHolder {
   bool empty() override { return data_.empty(); }
   void wait_not_empty() override {
     std::unique_lock lk(mtx_);
-    cv_.wait(lk, [this]() { return !running_.load() || !empty(); });
+    cv_.wait(lk,
+             [this]() { return !running_.load() || !empty() || !is_alive(); });
   }
   void clear() override { data_.clear(); }
   void concurrent_clear() override {
@@ -176,6 +194,8 @@ class RosChannelHolder : private BasicChannelHolder {
 using DataCb = std::function<void(
     const std::unordered_map<std::string, BaseMsgHolder::SharedPtr>&)>;
 using ChannelType = BaseChannelHolder::SharedPtr;
+using ChannelTypeRef = BaseChannelHolder::WeakPtr;
 using ChannelContainer = std::unordered_map<std::string, ChannelType>;
+using ChannelRefContainer = std::unordered_map<std::string, ChannelTypeRef>;
 using ChannelsContainer = std::shared_ptr<ChannelContainer>;
 using OutDataType = std::unordered_map<std::string, BaseMsgHolder::SharedPtr>;

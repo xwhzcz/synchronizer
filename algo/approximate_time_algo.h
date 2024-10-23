@@ -49,7 +49,7 @@ class ApproximateTimeAlgo : public BaseSyncAlog {
     TimestampType mini_size_;
   } status_;
   ChannelManager* channel_mgr_;
-  ChannelContainer active_channels_;
+  ChannelContainer alive_channels_;
   std::mutex mtx_;
   TimestampType mini_interval_{0};
 };

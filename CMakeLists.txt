@@ -52,9 +52,8 @@ target_compile_features(approximate_algo PUBLIC cxx_std_17)
 #                        PUBLIC -W -Wall -Wextra -pedantic -pedantic-errors)
 
 if (DEBUG_INFO)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE -DDEBUG)
-    target_compile_definitions(approximate_algo PRIVATE -DDEBUG)
-    set(CMAKE_BUILD_TYPE Debug)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE -DDEBUGINFO)
+    target_compile_definitions(approximate_algo PRIVATE -DDEBUGINFO)
 endif()
 
 # target_compile_definitions(${PROJECT_NAME} PRIVATE -DPI=3.1415926)

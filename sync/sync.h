@@ -56,7 +56,7 @@ Sync<Algo>::Sync() : algo_(&channel_mgr_) {}
 template <typename Algo>
 Sync<Algo>::~Sync() {
   stop();
-  if (worker_.joinable()) worker_.join();
+  join();
 }
 
 template <typename Algo>

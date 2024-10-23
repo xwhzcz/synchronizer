@@ -18,6 +18,7 @@
 
 const std::string ch_name1 = "foo";
 const std::string ch_name2 = "bar";
+const std::string ch_name3 = "foobar";
 bool stopped = false;
 
 #include <cstring>
@@ -116,12 +117,15 @@ class Cb {
         auto& msg = MsgHolder<MyString>::msg(data);
         std::cout << name << " " << msg.data() << " " << data->time()
                   << std::endl;
-      } else {
+      } else if (name == ch_name2) {
+        auto msg = MsgHolder<std::shared_ptr<int>>::msg(data);
+        std::cout << name << " " << *msg << " " << data->time() << std::endl;
+      } else if (name == ch_name3) {
         auto msg = MsgHolder<std::shared_ptr<int>>::msg(data);
         std::cout << name << " " << *msg << " " << data->time() << std::endl;
       }
+      std::cout << "-----------------------------------" << std::endl;
     }
-    std::cout << "-----------------------------------" << std::endl;
   }
 };
 
@@ -142,7 +146,7 @@ void add_string_msg(const std::string& ch_name) {
 void add_int_msg(const std::string& ch_name) {
   std::this_thread::sleep_for(std::chrono::milliseconds(5000));
   int count = 0;
-  while (!stopped) {
+  while (count < 150) {  // 模拟掉线
     ++count;
     Sync<ApproximateTimeAlgo>::instance().push(
         ch_name, std::make_shared<int>(count),
@@ -157,8 +161,9 @@ int main(int argc, char** argv) {
   Sync<ApproximateTimeAlgo>::instance().set_data_cb(
       std::bind(&Cb::data_cb, cb, std::placeholders::_1));
 
-  // 设置channel数量，注意此项为必设项，channel实际数量等于设置值时才会开始同步
-  Sync<ApproximateTimeAlgo>::instance().set_channel_nums(2);
+  // 设置channel数量。注意此项为非必设项；若设置，则1.
+  // channel实际数量等于设置值时才会开始同步，2.运行中不可再添加channel
+  // Sync<ApproximateTimeAlgo>::instance().set_channel_nums(2);
   Sync<ApproximateTimeAlgo>::instance().run();
 
   // 添加channel
@@ -169,17 +174,22 @@ int main(int argc, char** argv) {
   Sync<ApproximateTimeAlgo>::instance().add_basic_channel(ch_name2, 4096);
 
   // 添加数据
-  auto t1 = std::thread(add_string_msg, ch_name1);
-  std::this_thread::sleep_for(std::chrono::seconds(5));
   auto t2 = std::thread(add_int_msg, ch_name2);
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  auto t1 = std::thread(add_string_msg, ch_name1);
+  t2.join();
+  t2 = std::thread(add_int_msg, ch_name2);
+  Sync<ApproximateTimeAlgo>::instance().add_basic_channel(ch_name3, 4096);
+  auto t3 = std::thread(add_int_msg, ch_name3);
 
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  std::this_thread::sleep_for(std::chrono::seconds(30));
   Sync<ApproximateTimeAlgo>::instance().stop();
   stopped = true;
   std::cout << "sync has stopped" << std::endl;
   Sync<ApproximateTimeAlgo>::instance().join();
   t1.join();
   t2.join();
+  t3.join();
 
   return 0;
 }
